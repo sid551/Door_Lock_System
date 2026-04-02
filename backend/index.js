@@ -1,7 +1,8 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const axios = require("axios"); // ✅ Added (was missing)
+const axios = require("axios");
+const { sendSecurityAlert } = require("./emailService");
 
 // Try to load Firebase config, but handle errors gracefully
 let db, realtimeDb;
@@ -144,6 +145,19 @@ app.post("/api/logs", async (req, res) => {
       const logsRef = realtimeDb.ref("rfid_logs"); // keeping rfid_logs
       const newLogRef = await logsRef.push(logEntry);
 
+      // Send email notification for failed attempts or if enabled for all
+      if (
+        normalizedAttempt === "failed" ||
+        process.env.EMAIL_ALL_ATTEMPTS === "true"
+      ) {
+        sendSecurityAlert({
+          ...logEntry,
+          entry_time: logEntry.entry_time,
+        }).catch((err) =>
+          console.log("Email notification failed:", err.message)
+        );
+      }
+
       return res.json({
         success: true,
         message: "Access log recorded successfully",
@@ -194,8 +208,7 @@ app.post("/api/test-log", async (req, res) => {
       },
     ];
 
-    const randomLog =
-      sampleLogs[Math.floor(Math.random() * sampleLogs.length)];
+    const randomLog = sampleLogs[Math.floor(Math.random() * sampleLogs.length)];
 
     const logEntry = {
       ...randomLog,
@@ -236,6 +249,84 @@ app.post("/api/test-log", async (req, res) => {
       success: false,
       message: "Failed to add test log: " + error.message,
     });
+  }
+});
+
+/* =========================================================
+   ANALYTICS ENDPOINTS
+========================================================= */
+app.get("/api/analytics/stats", async (req, res) => {
+  try {
+    if (realtimeDb) {
+      const logsRef = realtimeDb.ref("rfid_logs");
+      const snapshot = await logsRef.limitToLast(1000).once("value");
+
+      const logs = [];
+      snapshot.forEach((childSnapshot) => {
+        logs.push(childSnapshot.val());
+      });
+
+      const now = Date.now();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+      const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+      const stats = {
+        total: logs.length,
+        today: logs.filter((l) => l.timestamp >= today.getTime()).length,
+        week: logs.filter((l) => l.timestamp >= weekAgo).length,
+        month: logs.filter((l) => l.timestamp >= monthAgo).length,
+        success: logs.filter((l) => l.attempt === "success").length,
+        failed: logs.filter((l) => l.attempt === "failed").length,
+      };
+
+      return res.json({ success: true, data: stats });
+    }
+
+    res.json({ success: false, message: "Firebase not configured" });
+  } catch (error) {
+    console.error("Error fetching analytics:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get("/api/analytics/door-status", async (req, res) => {
+  try {
+    if (realtimeDb) {
+      const logsRef = realtimeDb.ref("rfid_logs");
+      const snapshot = await logsRef
+        .orderByChild("timestamp")
+        .limitToLast(1)
+        .once("value");
+
+      let latestLog = null;
+      snapshot.forEach((childSnapshot) => {
+        latestLog = childSnapshot.val();
+      });
+
+      if (latestLog) {
+        const timeSinceLastAccess = Date.now() - latestLog.timestamp;
+        const fiveMinutes = 5 * 60 * 1000;
+
+        return res.json({
+          success: true,
+          data: {
+            status: timeSinceLastAccess < fiveMinutes ? "active" : "locked",
+            lastActivity: latestLog.timestamp,
+            lastUser: latestLog.emp_name,
+          },
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: { status: "unknown", lastActivity: null, lastUser: null },
+    });
+  } catch (error) {
+    console.error("Error fetching door status:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

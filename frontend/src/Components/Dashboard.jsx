@@ -2,6 +2,11 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../Contexts/AuthContext";
 import { useFirebaseRealtime } from "../hooks/useFirebaseRealtime";
 import TestPanel from "./TestPanel";
+import AnalyticsCards from "./AnalyticsCards";
+import AccessChart from "./AccessChart";
+import EmployeeAnalytics from "./EmployeeAnalytics";
+import ExportButtons from "./ExportButtons";
+import NotificationSettings from "./NotificationSettings";
 
 export default function Dashboard() {
   const [logs, setLogs] = useState([]);
@@ -20,9 +25,7 @@ export default function Dashboard() {
     let filtered = logs;
 
     if (employeeFilter) {
-      filtered = filtered.filter(
-        (log) => log.emp_name === employeeFilter
-      );
+      filtered = filtered.filter((log) => log.emp_name === employeeFilter);
     }
 
     // ❌ OLD (could crash if entry_time invalid)
@@ -42,11 +45,13 @@ export default function Dashboard() {
       filtered = filtered.filter((log) => {
         if (!log.timestamp) return false;
 
-        const logDate = new Date(log.timestamp)
-          .toISOString()
-          .split("T")[0];
-
-        return logDate === dateFilter;
+        try {
+          const logDate = new Date(log.timestamp).toISOString().split("T")[0];
+          return logDate === dateFilter;
+        } catch (error) {
+          console.warn("Invalid timestamp for log:", log);
+          return false;
+        }
       });
     }
 
@@ -69,9 +74,7 @@ export default function Dashboard() {
       return;
     }
 
-    const uniqueEmployees = [
-      ...new Set(logs.map((log) => log.emp_name)),
-    ];
+    const uniqueEmployees = [...new Set(logs.map((log) => log.emp_name))];
     setEmployees(uniqueEmployees.sort());
   }, [logs]);
 
@@ -105,10 +108,7 @@ export default function Dashboard() {
   const formatDateTime = (value) => {
     if (!value) return "Invalid Date";
 
-    const date =
-      typeof value === "number"
-        ? new Date(value)
-        : new Date(value);
+    const date = typeof value === "number" ? new Date(value) : new Date(value);
 
     if (isNaN(date.getTime())) return "Invalid Date";
 
@@ -128,27 +128,32 @@ export default function Dashboard() {
   const isSuccess = status.toLowerCase() === "success";
   */
 
-const getStatusBadge = (status) => {
-  // Convert to string safely
-  const safeStatus =
-    typeof status === "string"
-      ? status.toLowerCase()
-      : String(status || "").toLowerCase();
+  const getStatusBadge = (log) => {
+    // Check both attempt and status fields
+    // If attempt is a number, use status instead
+    const attemptValue = log.attempt || "";
+    const statusValue = log.status || "";
+    const isAttemptNumber =
+      typeof attemptValue === "number" || !isNaN(Number(attemptValue));
 
-  const isSuccess = safeStatus === "success";
+    const statusToCheck = isAttemptNumber
+      ? statusValue
+      : attemptValue || statusValue;
+    const statusText = String(statusToCheck).toLowerCase();
+    const isSuccess = statusText === "success" || statusText === "granted";
 
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-        isSuccess
-          ? "bg-green-100 text-green-700 border border-green-200"
-          : "bg-red-100 text-red-700 border border-red-200"
-      }`}
-    >
-      {isSuccess ? "✓" : "✕"} {status || "Unknown"}
-    </span>
-  );
-};
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+          isSuccess
+            ? "bg-green-100 text-green-700 border border-green-200"
+            : "bg-red-100 text-red-700 border border-red-200"
+        }`}
+      >
+        {isSuccess ? "✓" : "✕"} {isSuccess ? "Success" : "Failed"}
+      </span>
+    );
+  };
 
   if (loading) {
     return (
@@ -169,9 +174,7 @@ const getStatusBadge = (status) => {
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       <header className="p-4 flex justify-between items-center bg-slate-800">
-        <h1 className="text-xl font-bold">
-          Door Lock System Dashboard
-        </h1>
+        <h1 className="text-xl font-bold">Door Lock System Dashboard</h1>
 
         <div className="flex gap-3">
           <button
@@ -182,24 +185,33 @@ const getStatusBadge = (status) => {
             {refreshing ? "Refreshing..." : "Refresh"}
           </button>
 
-          <button
-            onClick={logout}
-            className="px-4 py-2 bg-red-600 rounded"
-          >
+          <button onClick={logout} className="px-4 py-2 bg-red-600 rounded">
             Logout
           </button>
         </div>
       </header>
 
       <main className="p-6">
+        {/* ---------------- ANALYTICS CARDS ---------------- */}
+        <AnalyticsCards logs={logs} />
+
+        {/* ---------------- ACCESS CHART ---------------- */}
+        <AccessChart logs={logs} />
+
+        {/* ---------------- EMPLOYEE ANALYTICS ---------------- */}
+        <EmployeeAnalytics logs={logs} />
+
+        {/* ---------------- NOTIFICATION SETTINGS ---------------- */}
+        <NotificationSettings />
+
+        {/* ---------------- EXPORT BUTTONS ---------------- */}
+        <ExportButtons logs={logs} filteredLogs={filteredLogs} />
 
         {/* ---------------- FILTERS ---------------- */}
         <div className="flex gap-4 mb-4">
           <select
             value={employeeFilter}
-            onChange={(e) =>
-              setEmployeeFilter(e.target.value)
-            }
+            onChange={(e) => setEmployeeFilter(e.target.value)}
             className="px-3 py-2 text-black rounded bg-white"
           >
             <option value="">All Employees</option>
@@ -213,9 +225,7 @@ const getStatusBadge = (status) => {
           <input
             type="date"
             value={dateFilter}
-            onChange={(e) =>
-              setDateFilter(e.target.value)
-            }
+            onChange={(e) => setDateFilter(e.target.value)}
             className="px-3 py-2 text-black rounded bg-white"
           />
 
@@ -249,32 +259,19 @@ const getStatusBadge = (status) => {
                 </tr>
               ) : (
                 filteredLogs.map((log, index) => (
-                  <tr
-                    key={log.id || index}
-                    className="border-b"
-                  >
+                  <tr key={log.id || index} className="border-b">
+                    <td className="p-3">#{log.id || "N/A"}</td>
+                    <td className="p-3">{log.emp_name}</td>
                     <td className="p-3">
-                      #{log.id || "N/A"}
+                      {formatDateTime(log.timestamp || log.entry_time)}
                     </td>
-                    <td className="p-3">
-                      {log.emp_name}
-                    </td>
-                    <td className="p-3">
-                      {formatDateTime(
-                        log.timestamp || log.entry_time
-                      )}
-                    </td>
-                    <td className="p-3">
-                      {getStatusBadge(log.attempt)}
-                    </td>
+                    <td className="p-3">{getStatusBadge(log)}</td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
-
-        
       </main>
     </div>
   );

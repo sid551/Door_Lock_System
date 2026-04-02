@@ -13,6 +13,11 @@ A real-time IoT security lock system that tracks access attempts and displays th
 - 🔥 **Real-time Firebase Integration** - Live updates without page refresh
 - 🔒 **Security Access Logging** - Track successful and failed access attempts
 - 📊 **Live Dashboard** - Real-time monitoring of access logs
+- 📈 **Advanced Analytics** - Charts, statistics, and employee insights
+- 📧 **Email Notifications** - Security alerts for failed access attempts
+- 📄 **Export Reports** - CSV and PDF export with charts
+- 👥 **Employee Analytics** - Individual access history and patterns
+- 🚪 **Door Status Tracking** - Real-time lock status monitoring
 - 🧪 **Test Panel** - Add sample data for development and testing
 - 🔐 **Authentication System** - Secure admin access
 - 📱 **Responsive Design** - Works on desktop, tablet, and mobile
@@ -84,6 +89,7 @@ npm run dev
 ## 📖 Documentation
 
 - 📋 [Firebase Setup Guide](FIREBASE_SETUP_GUIDE.md) - Complete Firebase configuration
+- 📊 [Analytics Guide](ANALYTICS_GUIDE.md) - Analytics features and email setup
 - 🧪 [Testing Guide](TESTING_GUIDE.md) - How to test all features
 - 🚀 [GitHub Deployment Guide](GITHUB_DEPLOYMENT_GUIDE.md) - Deploy to GitHub
 
@@ -126,6 +132,11 @@ npm run dev
 ### Testing
 
 - `POST /api/test-log` - Add random test data
+
+### Analytics
+
+- `GET /api/analytics/stats` - Get access statistics (today/week/month)
+- `GET /api/analytics/door-status` - Get current door status
 
 ## 🤖 IoT Device Integration
 
