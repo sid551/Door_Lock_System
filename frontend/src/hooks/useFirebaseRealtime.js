@@ -23,31 +23,64 @@ export const useFirebaseRealtime = (path, limit = 50) => {
         (snapshot) => {
           clearTimeout(loadingTimeout);
 
+          console.log("🔥 Firebase data received:", snapshot.exists());
+
           if (snapshot.exists()) {
             const firebaseData = snapshot.val();
+            console.log(
+              "📊 Total entries in Firebase:",
+              Object.keys(firebaseData).length
+            );
 
             const dataArray = Object.keys(firebaseData).map((key) => ({
               id: key,
               ...firebaseData[key],
             }));
 
+            console.log(
+              "📋 First 3 entries:",
+              dataArray.slice(0, 3).map((d) => ({
+                id: d.id,
+                name: d.emp_name,
+                timestamp: d.timestamp,
+              }))
+            );
+
             // Safe sorting (newest first)
             dataArray.sort((a, b) => {
-              const timeA =
-                typeof a.timestamp === "number"
-                  ? a.timestamp
-                  : new Date(a.entry_time || 0).getTime();
+              let timeA = 0;
+              let timeB = 0;
 
-              const timeB =
-                typeof b.timestamp === "number"
-                  ? b.timestamp
-                  : new Date(b.entry_time || 0).getTime();
+              // Handle timeA
+              if (typeof a.timestamp === "number") {
+                timeA = a.timestamp;
+              } else if (typeof a.timestamp === "string") {
+                timeA = new Date(a.timestamp).getTime();
+                if (isNaN(timeA)) timeA = 0;
+              } else if (a.entry_time) {
+                timeA = new Date(a.entry_time).getTime();
+                if (isNaN(timeA)) timeA = 0;
+              }
 
-              return timeB - timeA;
+              // Handle timeB
+              if (typeof b.timestamp === "number") {
+                timeB = b.timestamp;
+              } else if (typeof b.timestamp === "string") {
+                timeB = new Date(b.timestamp).getTime();
+                if (isNaN(timeB)) timeB = 0;
+              } else if (b.entry_time) {
+                timeB = new Date(b.entry_time).getTime();
+                if (isNaN(timeB)) timeB = 0;
+              }
+
+              return timeB - timeA; // Newest first
             });
 
-            setData(dataArray.slice(0, limit));
+            const limitedData = dataArray.slice(0, limit);
+            console.log("✅ Setting data with", limitedData.length, "entries");
+            setData(limitedData);
           } else {
+            console.log("⚠️ No data in Firebase");
             setData([]);
           }
 
@@ -55,6 +88,7 @@ export const useFirebaseRealtime = (path, limit = 50) => {
           setError(null);
         },
         (err) => {
+          console.error("❌ Firebase error:", err);
           clearTimeout(loadingTimeout);
           setError(err);
           setLoading(false);
